@@ -2786,6 +2786,7 @@ using browser_engine = detail::cocoa_wkwebview_engine;
 #include <windows.h>
 
 #include "WebView2.h"
+#include <wrl.h>
 
 #ifdef _MSC_VER
 #pragma comment(lib, "advapi32.lib")
@@ -3286,6 +3287,12 @@ static constexpr IID
         0x9B11,
         0x47B5,
         {0xBC, 0x6F, 0x8E, 0x78, 0x95, 0xFC, 0xEA, 0x17}};
+static constexpr IID
+    IID_ICoreWebView2ServerCertificateErrorDetectedEventHandler{
+        0x969B3A26,
+        0xD85E,
+        0x4795,
+        {0x81, 0x99, 0xFE, 0xF5, 0x73, 0x44, 0xDA, 0x22}};
 
 #if WEBVIEW_MSWEBVIEW2_BUILTIN_IMPL == 1
 enum class webview2_runtime_type { installed = 0, embedded = 1 };
@@ -3537,8 +3544,12 @@ static constexpr auto permission_requested =
 
 static constexpr auto add_script_to_execute_on_document_created_completed =
     cast_info_t<
-        ICoreWebView2AddScriptToExecuteOnDocumentCreatedCompletedHandler>{
+    ICoreWebView2AddScriptToExecuteOnDocumentCreatedCompletedHandler>{
         IID_ICoreWebView2AddScriptToExecuteOnDocumentCreatedCompletedHandler};
+
+static constexpr auto server_certificate_error_detected =
+    cast_info_t<ICoreWebView2ServerCertificateErrorDetectedEventHandler>{
+        IID_ICoreWebView2ServerCertificateErrorDetectedEventHandler};
 } // namespace cast_info
 } // namespace mswebview2
 
@@ -3564,7 +3575,8 @@ class webview2_com_handler
     : public ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler,
       public ICoreWebView2CreateCoreWebView2ControllerCompletedHandler,
       public ICoreWebView2WebMessageReceivedEventHandler,
-      public ICoreWebView2PermissionRequestedEventHandler {
+      public ICoreWebView2PermissionRequestedEventHandler,
+      public ICoreWebView2ServerCertificateErrorDetectedEventHandler {
   using webview2_com_handler_cb_t =
       std::function<void(ICoreWebView2Controller *, ICoreWebView2 *webview)>;
 
@@ -3607,6 +3619,10 @@ public:
         cast_if_equal_iid(this, riid, environment_completed, ppv) ||
         cast_if_equal_iid(this, riid, message_received, ppv) ||
         cast_if_equal_iid(this, riid, permission_requested, ppv)) {
+      return S_OK;
+    }
+
+    if (cast_if_equal_iid(this, riid, server_certificate_error_detected, ppv)) {
       return S_OK;
     }
 
@@ -3666,6 +3682,18 @@ public:
     if (kind == COREWEBVIEW2_PERMISSION_KIND_CLIPBOARD_READ) {
       args->put_State(COREWEBVIEW2_PERMISSION_STATE_ALLOW);
     }
+    return S_OK;
+  }
+
+  HRESULT STDMETHODCALLTYPE
+  Invoke(ICoreWebView2 * /*sender*/,
+         ICoreWebView2ServerCertificateErrorDetectedEventArgs *args) {
+
+    //MessageBoxW(nullptr,
+    //            L"XXX ICoreWebView2ServerCertificateErrorDetectedEventArgs 222",
+    //            L"AAAAA333AA", MB_OK);
+
+    args->put_Action(COREWEBVIEW2_SERVER_CERTIFICATE_ERROR_ACTION_ALWAYS_ALLOW);
     return S_OK;
   }
 
@@ -4251,6 +4279,32 @@ private:
       return error_info{WEBVIEW_ERROR_UNSPECIFIED,
                         "put_IsStatusBarEnabled failed"};
     }
+#if 0
+    {
+        using namespace Microsoft::WRL;
+        ICoreWebView2_14 *pWebView2_14;
+        HRESULT hr = m_webview->QueryInterface(
+            IID_ICoreWebView2_14, reinterpret_cast<void **>(&pWebView2_14));
+
+         if (SUCCEEDED(hr) && pWebView2_14) {
+            pWebView2_14->add_ServerCertificateErrorDetected(
+                Callback<ICoreWebView2ServerCertificateErrorDetectedEventHandler>(
+                    [this](ICoreWebView2 *sender,
+                           ICoreWebView2ServerCertificateErrorDetectedEventArgs
+                               *args) {
+                      args->put_Action(
+                          COREWEBVIEW2_SERVER_CERTIFICATE_ERROR_ACTION_ALWAYS_ALLOW);
+                      return S_OK;
+                    })
+                    .Get(),
+                nullptr);
+         }
+         else
+         {
+           MessageBoxW(nullptr, L"Not Support WebView2_14",L"DEBUG",MB_OK);
+         }
+    }
+#endif
     add_init_script("function(message) {\n\
   return window.chrome.webview.postMessage(message);\n\
 }");
